@@ -2,29 +2,40 @@ import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
-    email:{
+    email: {
       type: String,
-      required: true,
       unique: true,
     },
-    fullname : {
+    fullname: {
       type: String,
-      required : true,
+      required: true,
     },
-    password : {
+    password: {
       type: String,
-      required : true,
-      minlength : 6,
+      minlength: 6,
     },
-    profilePic : {
-      type : String,
-      default : ""
-    }
+    profilePic: {
+      type: String,
+      default: "",
+    },
+    isGuest: {
+      type: Boolean,
+      default: false,
+    },
+    guestId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    guestPinHash: {
+      type: String,
+      sparse: true,
+    },
   },
   {
-    timestamps: true
+    timestamps: true,
   }
-)
+);
 
 const User = mongoose.model("User", userSchema);
 

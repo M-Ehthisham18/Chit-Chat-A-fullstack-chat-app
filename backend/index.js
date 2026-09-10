@@ -8,6 +8,7 @@ import path from "path"
 
 import authRoutes from "./src/routes/auth.route.js"
 import messageRoutes from "./src/routes/message.route.js"
+import blockRoutes from "./src/routes/block.route.js"
 import {app, server} from "./src/lib/socket.js"
 
 import deleteMessages from "./src/seeds/delete.message.js";
@@ -30,6 +31,7 @@ app.use(cors(
 
 
 app.use('/api/auth', authRoutes)
+app.use('/api/blocks', blockRoutes)
 app.use('/api/messages', messageRoutes)
 // deleteMessages();
 

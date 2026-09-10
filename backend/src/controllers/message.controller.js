@@ -1,5 +1,6 @@
 import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
+import Block from "../models/block.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import { getReceiverSocketId , io } from "../lib/socket.js";
 
@@ -13,9 +14,36 @@ const getUsersForSidebar = async (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
+    const users = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
 
-    res.status(200).json(filteredUsers);
+    // Fetch all blocks involving the logged-in user to avoid N+1 queries
+    const blocks = await Block.find({
+      $or: [
+        { blockerId: loggedInUserId },
+        { blockedId: loggedInUserId },
+      ],
+    });
+
+    const blockMap = new Map();
+    blocks.forEach(block => {
+      blockMap.set(
+        block.blockerId.toString() === loggedInUserId.toString()
+          ? block.blockedId.toString()
+          : block.blockerId.toString(),
+        block
+      );
+    });
+
+    const usersWithBlockState = users.map((user) => {
+      const block = blockMap.get(user._id.toString());
+      return {
+        ...user.toObject(),
+        blockedByMe: block && block.blockerId.toString() === loggedInUserId.toString(),
+        blockedMe: block && block.blockedId.toString() === loggedInUserId.toString(),
+      };
+    });
+
+    res.status(200).json(usersWithBlockState);
   } catch (error) {
     console.error(`getUsersForSidebar error: ${error.message}`);
     return res.status(500).json({ message: "Internal server error." });
@@ -48,6 +76,18 @@ const sendMessage = async (req, res) => {
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
+    // Block Authorization: check if either user has blocked the other
+    const block = await Block.findOne({
+      $or: [
+        { blockerId: senderId, blockedId: receiverId },
+        { blockerId: receiverId, blockedId: senderId },
+      ],
+    });
+
+    if (block) {
+      return res.status(403).json({ message: "You cannot send messages to this user." });
+    }
+
     let imageUrl;
     if (image) {
       // Upload base64 image to cloudinary
@@ -68,12 +108,12 @@ const sendMessage = async (req, res) => {
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("newMessage", newMessage);
     }
- 
+
     res.status(201).json(newMessage);
   } catch (error) {
     console.log("Error in sendMessage controller: ", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
-}; 
+};
 
 export { getUsersForSidebar, getMessages, sendMessage };

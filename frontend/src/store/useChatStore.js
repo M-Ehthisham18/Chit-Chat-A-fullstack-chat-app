@@ -27,6 +27,52 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  blockUser: async (userId) => {
+    try {
+      await axiosInstance.post(`/blocks/block/${userId}`);
+      toast.success("User blocked");
+
+      // Update local users list to reflect block state
+      set((state) => ({
+        users: state.users.map((u) =>
+          u._id === userId ? { ...u, blockedByMe: true, blockedMe: false } : u
+        ),
+      }));
+
+      // Update selected user if it's the one being blocked
+      set((state) => ({
+        selectedUser: state.selectedUser?._id === userId
+          ? { ...state.selectedUser, blockedByMe: true, blockedMe: false }
+          : state.selectedUser,
+      }));
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to block user");
+    }
+  },
+
+  unblockUser: async (userId) => {
+    try {
+      await axiosInstance.post(`/blocks/unblock/${userId}`);
+      toast.success("User unblocked");
+
+      // Update local users list to reflect unblock state
+      set((state) => ({
+        users: state.users.map((u) =>
+          u._id === userId ? { ...u, blockedByMe: false, blockedMe: false } : u
+        ),
+      }));
+
+      // Update selected user if it's the one being unblocked
+      set((state) => ({
+        selectedUser: state.selectedUser?._id === userId
+          ? { ...state.selectedUser, blockedByMe: false, blockedMe: false }
+          : state.selectedUser,
+      }));
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to unblock user");
+    }
+  },
+
   getMessages: async (userId) => {
     set({ inMessagesLoading: true });
     try {

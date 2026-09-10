@@ -1,12 +1,16 @@
 import React, { useState } from "react";
 import { useAuthStore } from "../store/useAuthSotre";
-import { Camera, Mail, User, Loader } from "lucide-react";
+import { Camera, Mail, User, Loader, Key, Edit2, X, Check } from "lucide-react";
 
 const Profilepage = () => {
   const { authUser, isUpdatingProfile, updateProfile, deleteAccount, isAccountDeleting } = useAuthStore();
   const [selectedImg, setSelectedImg] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [password, setPassword] = useState("");
+
+  // Name editing state
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState(authUser?.fullname || "");
 
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
@@ -22,13 +26,21 @@ const Profilepage = () => {
     };
   };
 
+  const handleNameSubmit = async () => {
+    if (!nameValue.trim() || nameValue.trim().length < 2) {
+      return;
+    }
+    await updateProfile({ fullname: nameValue });
+    setIsEditingName(false);
+  };
+
   const handleDeleteAccount = () => {
     setIsDeleteModalOpen(true);
   };
 
   const confirmDeleteAccount = async () => {
     if (!password) return;
-  
+
     await deleteAccount(password);
     setIsDeleteModalOpen(false);
     setPassword("");
@@ -50,13 +62,16 @@ const Profilepage = () => {
                 src={selectedImg || authUser.profilePic || "/avatar.png"}
                 alt="Profile"
                 className="size-32 rounded-full object-cover border-4 "
+                onError={(e) => {
+                  e.currentTarget.src = "/avatar.png";
+                }}
               />
               <label
                 htmlFor="avatar-upload"
                 className={`
-                  absolute bottom-0 right-0 
+                  absolute bottom-0 right-0
                   bg-base-content hover:scale-105
-                  p-2 rounded-full cursor-pointer 
+                  p-2 rounded-full cursor-pointer
                   transition-all duration-200
                   ${isUpdatingProfile ? "animate-pulse pointer-events-none" : ""}
                 `}
@@ -84,18 +99,57 @@ const Profilepage = () => {
                 <User className="w-4 h-4" />
                 Full Name
               </div>
-              <p className="px-4 py-2.5 bg-base-200 rounded-lg border">
-                {authUser?.fullname}
-              </p>
+              <div className="relative group">
+                {isEditingName ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className="flex-1 px-4 py-2.5 bg-base-200 rounded-lg border focus:outline-none focus:ring-2 focus:ring-primary"
+                      value={nameValue}
+                      onChange={(e) => setNameValue(e.target.value)}
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleNameSubmit}
+                      disabled={isUpdatingProfile}
+                      className="p-2.5 bg-primary text-white rounded-lg hover:bg-primary-focus disabled:opacity-50"
+                    >
+                      <Check className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditingName(false);
+                        setNameValue(authUser?.fullname || "");
+                      }}
+                      className="p-2.5 bg-base-content text-base-200 rounded-lg hover:bg-zinc-700"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-base-200 rounded-lg border group">
+                    <p>{authUser?.fullname}</p>
+                    <button
+                      onClick={() => {
+                        setNameValue(authUser?.fullname || "");
+                        setIsEditingName(true);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-base-300 rounded"
+                    >
+                      <Edit2 className="w-4 h-4 text-zinc-400" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="space-y-1.5">
               <div className="text-sm text-zinc-400 flex items-center gap-2">
-                <Mail className="w-4 h-4" />
-                Email Address
+                {authUser?.isGuest ? <Key className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
+                {authUser?.isGuest ? "Guest ID" : "Email Address"}
               </div>
               <p className="px-4 py-2.5 bg-base-200 rounded-lg border">
-                {authUser?.email}
+                {authUser?.isGuest ? authUser?.guestId : authUser?.email}
               </p>
             </div>
           </div>

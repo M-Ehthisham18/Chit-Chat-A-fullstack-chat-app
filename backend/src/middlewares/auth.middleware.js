@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import User from "../models/user.model.js";
 import dotenv from "dotenv";
+import { generateGuestId } from "../lib/guestUtils.js";
 
 dotenv.config(); // Ensure environment variables are loaded
 
@@ -30,6 +31,19 @@ const protectRoute = async (req, res, next) => {
     const user = await User.findById(decoded.userId).select("-password");
     if (!user) {
       return res.status(401).json({ message: "User not found" });
+    }
+
+    // Fix legacy guests: if isGuest is true but guestId is missing, generate one and save it.
+    if (user.isGuest && !user.guestId) {
+      let guestId;
+      let isUnique = false;
+      while (!isUnique) {
+        guestId = generateGuestId();
+        const existing = await User.findOne({ guestId });
+        if (!existing) isUnique = true;
+      }
+      user.guestId = guestId;
+      await user.save();
     }
 
     req.user = user;

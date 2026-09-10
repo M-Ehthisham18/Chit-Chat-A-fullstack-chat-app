@@ -64,6 +64,9 @@ const ChatContainer = () => {
                       : selectedUser.profilePic || "/avatar.png"
                   }
                   alt="profile pic"
+                  onError={(e) => {
+                    e.currentTarget.src = "/avatar.png";
+                  }}
                 />
               </div>
             </div>
@@ -78,6 +81,9 @@ const ChatContainer = () => {
                   src={message.image}
                   alt="Attachment"
                   className="sm:max-w-[200px] rounded-md mb-2 "
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
                 />
               )}
               {message.text && <p>{message.text}</p>}

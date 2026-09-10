@@ -23,7 +23,10 @@ export const useAuthStore = create((set, get) => ({
       set({ authUser: res.data });
       get().connectSocket();
     } catch (error) {
-      console.log("Error in checkAuth:", error);
+      const isUnauthorized = error.response?.status === 401;
+      if (!isUnauthorized) {
+        console.log("Unexpected error in checkAuth:", error);
+      }
       set({ authUser: null });
     } finally {
       set({ isCheckingAuth: false });
@@ -64,7 +67,41 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  guestLogin: async (data) => {
+    set({ isLoggingIn: true });
+    try {
+      const res = await axiosInstance.post("/auth/guest", data);
+      set({ authUser: res.data });
+      get().connectSocket();
+      return res.data; // Return user data for the modal
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "Guest entry failed. Please try again."
+      );
+      return null;
+    } finally {
+      set({ isLoggingIn: false });
+    }
+  },
+
+  guestReLogin: async (data) => {
+    set({ isLoggingIn: true });
+    try {
+      const res = await axiosInstance.post("/auth/guest-login", data);
+      set({ authUser: res.data });
+      toast.success("Welcome back, Guest!");
+      get().connectSocket();
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "Guest login failed. Invalid credentials."
+      );
+    } finally {
+      set({ isLoggingIn: false });
+    }
+  },
+
   logout: async () => {
+
     try {
       await axiosInstance.post("/auth/logout");
       set({ authUser: null });
@@ -117,9 +154,7 @@ export const useAuthStore = create((set, get) => ({
     if (!authUser || get().socket?.connected) return;
 
     const socket = io(BASE_URL, {
-      query: {
-        userId: authUser._id,
-      },
+      withCredentials: true,
     });
     socket.connect();
 

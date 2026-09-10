@@ -2,11 +2,14 @@ import bcrypt from "bcryptjs";
 import User from "../models/user.model.js";
 import generateToken from "../lib/utils.token.js";
 import cloudinary from "../lib/cloudinary.js";
+import crypto from "crypto";
+import { generateGuestId, generateGuestPin } from "../lib/guestUtils.js";
+import { serializeUser } from "../lib/userUtils.js";
 
 // signup route function
 const signup = async (req, res) => {
   const { fullname, email, password } = req.body;
-  try { 
+  try {
     if (!fullname || !email || !password) {
       return res.status(400).json({ message: "All fields are required! " });
     }
@@ -32,17 +35,98 @@ const signup = async (req, res) => {
       generateToken(newUser._id, res);
       await newUser.save();
 
-      res.status(201).json({
-        _id: newUser._id,
-        fullname: newUser.fullname,
-        email: newUser.email,
-        profilePic: newUser.profilePic,
-      });
+      res.status(201).json(serializeUser(newUser));
     } else {
       res.status(400).json({ message: "Invalid credentails!" });
     }
   } catch (error) {
     res.status(500).json({ message: "internal error" });
+  }
+};
+
+// guest signup route function
+const guestSignup = async (req, res) => {
+  const { password } = req.body;
+  try {
+    if (!password) {
+      return res.status(400).json({ message: "Password is required for guest account!" });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters!" });
+    }
+
+    const guestEmail = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 7)}@chit-chat.guest`;
+
+    let guestId;
+    let isUnique = false;
+    while (!isUnique) {
+      guestId = generateGuestId();
+      const existing = await User.findOne({ guestId });
+      if (!existing) isUnique = true;
+    }
+
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const guestUser = new User({
+      fullname: "Guest User",
+      email: guestEmail,
+      isGuest: true,
+      guestId,
+      password: hashedPassword,
+    });
+
+    if (guestUser) {
+      generateToken(guestUser._id, res);
+      await guestUser.save();
+
+      res.status(201).json({
+        ...serializeUser(guestUser),
+      });
+    } else {
+      res.status(400).json({ message: "Invalid guest creation!" });
+    }
+  } catch (error) {
+    console.error("Guest signup error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// guest login route function
+const guestLogin = async (req, res) => {
+  const { guestId, password } = req.body;
+
+  try {
+    if (!guestId || !password) {
+      return res.status(400).json({ message: "Guest ID and password are required!" });
+    }
+
+    // Normalize guestId for case-insensitive matching
+    const normalizedGuestId = guestId.trim().toUpperCase();
+    const user = await User.findOne({ guestId: normalizedGuestId, isGuest: true });
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid Guest credentials!" });
+    }
+
+    // Migration compatibility: Check password first, then fallback to legacy PIN
+    let isAuthCorrect = false;
+    if (user.password) {
+      isAuthCorrect = await bcrypt.compare(password, user.password);
+    } else if (user.guestPinHash) {
+      isAuthCorrect = await bcrypt.compare(password, user.guestPinHash);
+    }
+
+    if (!isAuthCorrect) {
+      return res.status(400).json({ message: "Invalid Guest credentials!" });
+    }
+
+    generateToken(user._id, res);
+
+    res.status(200).json(serializeUser(user));
+  } catch (error) {
+    console.error("Guest login error:", error);
+    return res.status(500).json({ message: "Internal server error!" });
   }
 };
 
@@ -63,12 +147,7 @@ const login = async (req, res) => {
 
     generateToken(user._id, res);
 
-    res.status(200).json({
-      _id: user._id,
-      fullname: user.fullname,
-      email: user.email,
-      profilePic: user.profilePic,
-    });
+    res.status(200).json(serializeUser(user));
   } catch (error) {
     return res.status(500).json({ message: "Internal error!" });
   }
@@ -87,23 +166,35 @@ const logout = async (req, res) => {
 //updateProfile route function
 const updateProfile = async (req, res) => {
   try {
-    const { profilePic } = req.body;
+    const { profilePic, fullname } = req.body;
     const userId = req.user._id;
-    // console.log(req.user);
-    
 
-    if (!profilePic) {
-      return res.status(400).json({ message: "Profile pic is required" });
+    const updateData = {};
+
+    if (fullname !== undefined) {
+      const trimmedName = fullname.trim();
+      if (trimmedName.length < 2 || trimmedName.length > 50) {
+        return res.status(400).json({ message: "Fullname must be between 2 and 50 characters" });
+      }
+      updateData.fullname = trimmedName;
     }
 
-    const uploadResponse = await cloudinary.uploader.upload(profilePic);
+    if (profilePic) {
+      const uploadResponse = await cloudinary.uploader.upload(profilePic);
+      updateData.profilePic = uploadResponse.secure_url;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: "No valid update fields provided" });
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
       userId,
-      { profilePic: uploadResponse.secure_url },
+      updateData,
       { new: true }
     );
 
-    res.status(200).json(updatedUser);
+    res.status(200).json(serializeUser(updatedUser));
   } catch (error) {
     console.log("error in update profile:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -113,7 +204,7 @@ const updateProfile = async (req, res) => {
 //checkAuth
 const checkAuth = (req, res) => {
   try {
-    res.status(200).json(req.user);
+    res.status(200).json(serializeUser(req.user));
   } catch (error) {
     res.status(500).json({ message: "Internal Server Error" });
   }
@@ -140,7 +231,7 @@ const deleteAccount = async (req, res) => {
     }
 
     await User.findOneAndDelete({ email });
-    
+
     res.status(200).json({ message: "Account Deleted Successfully!" });
   } catch (error) {
     console.error("Error deleting account:", error);
@@ -148,5 +239,4 @@ const deleteAccount = async (req, res) => {
   }
 };
 
-
-export { signup, login, logout, updateProfile,checkAuth, deleteAccount };
+export { signup, login, logout, updateProfile, checkAuth, deleteAccount, guestSignup, guestLogin };

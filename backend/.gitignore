@@ -70,3 +70,7 @@ build/
 .env
 backend/.env
 ./.env
+# Local maintenance and verification scripts
+fix-legacy-guests.js
+inspect-guests.js
+test-guest.js
